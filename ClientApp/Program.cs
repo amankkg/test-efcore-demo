@@ -14,58 +14,59 @@ namespace ClientApp
         {
             db = new DemoContext();
 
-            var total = await db.Users.CountAsync();
-            Console.WriteLine($"Users count: {total}");
 
-            // 1. Добавить юзера
-            // 2. Вытащить Id добавленного юзера
-            var janeDoe = new User { FullName = "Jane Doe", BirthDate = new DateTime(1993, 03, 24) };
-            //await AddUser(janeDoe);
+            // LINQ for IQueryable
 
-            // 3. Создать пост от имени юзера
-            var newPost = new Post { Title = "Hello world #2", Content = "Foo\nBar\nBaz" };
-            await AddUserPost(janeDoe, newPost);
+            // LINQ
+            // ~ SELECT user.FullName FROM Users as user WHERE user.Balance > 0 ORDER BY user.BirthDate
+            IQueryable<string> linq1 =
+                from u in db.Users
+                where u.Balance > 0
+                orderby u.BirthDate
+                select u.FullName;
+            string[] linq1Value = linq1.ToArray();
 
-            // 4. Обновить пост юзера
-            var johnDoePosts = await GetUserPosts(janeDoe.Id);
-            var firstPost = johnDoePosts[0];
-            firstPost.Title = "Hello World #2!!!";
-            await UpdatePost(firstPost);
+            // LINQ Extension Methods
+            // ~ SELECT user.FullName FROM Users as user WHERE user.Balance > 0 ORDER BY user.BirthDate
+            IQueryable<string> linq2 =
+                db.Users
+                .Where(u => u.Balance > 0)
+                .OrderBy(u => u.BirthDate)
+                .Select(u => u.FullName);
+            List<string> linq2Value = await linq2.ToListAsync();
 
-            // 5. Удалить пост юзера
-            await RemovePost(firstPost);
+            // ~ SELECT * FROM Users WHERE Balance > 0
+            IQueryable<User> linq3where = db.Users.Where(user => user.Balance > 0);
+            // ~ SELECT * FROM (linq3where) ORDER BY BirthDate
+            IQueryable<User> linq3whereOrder = linq3where.OrderBy(user => user.BirthDate);
+            // ~ SELECT FullName FROM (linq3order)
+            IQueryable<string> linq3whereOrderSelect = linq3whereOrder.Select(user => user.FullName);
+            var linq3value = await linq3whereOrderSelect.ToListAsync();
 
-            await db.DisposeAsync();
-        }
+            // not IQueryable!!!
+            IEnumerable<string> badLinq = db.Users
+                .ToArray()
+                .Where(u => u.Balance > 0)
+                .OrderBy(u => u.BirthDate)
+                .Select(u => u.FullName);
 
-        static async Task AddUser(User user)
-        {
-            db.Users.Add(user);
-            await db.SaveChangesAsync();
-        }
+            User firstUser = await db.Users.FirstAsync(); // exception if no users in table
+            firstUser = await db.Users.FirstOrDefaultAsync(); // no exception if no users in table
 
-        static async Task<IList<Post>> GetUserPosts(int userId)
-        {
-            return await db.Posts.Where(p => p.UserId == userId).ToListAsync();
-        }
+            User lastUser = await db.Users.OrderByDescending(u => u.Id).FirstAsync();
+            lastUser = await db.Users.OrderByDescending(u => u.Id).FirstOrDefaultAsync();
 
-        static async Task AddUserPost(User user, Post post)
-        {
-            db.Posts.Add(post);
-            post.User = user;
-            await db.SaveChangesAsync();
-        }
+            //User userById = await db.Users.SingleAsync(u => u.Id == 1002);
+            //userById = await db.Users.SingleOrDefaultAsync(u => u.Id == 1002);
+            //userById = await db.Users.FirstOrDefaultAsync(u => u.Id == 1002);
+            //userById = await db.Users.FindAsync(1002);
+            User userById = await db.Users.FindAsync(1002);
 
-        static async Task UpdatePost(Post post)
-        {
-            db.Posts.Update(post);
-            await db.SaveChangesAsync();
-        }
+            List<User> zeroBalanceUsers = await db.Users.Where(u => u.Balance == 0).ToListAsync();
 
-        static async Task RemovePost(Post post)
-        {
-            db.Posts.Remove(post);
-            await db.SaveChangesAsync();
+            List<User> zeroBalanceUsersPage3 = await db.Users.Where(u => u.Balance == 0).Skip(5 * 2).Take(5).ToListAsync();
+
+            List<Post> latestPosts = await db.Users.Include(u => u.Posts).Select(u => u.Posts.FirstOrDefault()).ToListAsync();
         }
     }
 }
